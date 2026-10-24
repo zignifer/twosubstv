@@ -61,3 +61,6 @@ finally {
     }
     Remove-Item -LiteralPath $taskFixture -Force
 }
+# The expected signature-failure fixture sets a native-style exit code. Reset it
+# only after every assertion and cleanup passed, so the CI shell reports success.
+$global:LASTEXITCODE = 0

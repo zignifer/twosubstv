@@ -87,7 +87,7 @@ Codex должен работать на компьютере, у которог
 
 ## Подойдёт ли моему ТВ?
 
-**Android TV или Google TV, Android 8.0+**, актуальный Android System WebView, интернет и обычный пульт. Один universal APK; Google Play для установки не нужен. Проверено на Xiaomi MiTV-MOOQ0 с Android 11. Другие модели пока не проходили полный прогон.
+**Android TV или Google TV, Android 8.0+**, актуальный Android System WebView, интернет и обычный пульт. Один universal APK; Google Play для установки не нужен. Проверено на Xiaomi MiTV-MOOQ0 с Android 11. Другие модели пока не проходили полный прогон. [Что именно проверено →](docs/VERIFICATION.md)
 
 Телевизоры **Samsung Tizen, LG webOS и Apple TV** не устанавливают Android APK. К ним можно подключить совместимую Android TV / Google TV приставку.
 
