@@ -1,0 +1,22 @@
+Rating source marks — 2SUB TV
+
+The Kinopoisk, IMDb and TMDB names and logos identify the source of ratings
+displayed by the 2SUB website. They remain the marks of their respective owners.
+They are not covered by the Lucide ISC or Feather MIT licenses. This application does
+not claim endorsement or certification by these brands.
+
+Kinopoisk artwork retrieved from:
+https://2sub.movie/wp-content/themes/2sub/images/icons/kp.svg
+
+IMDb artwork retrieved from:
+https://2sub.movie/wp-content/themes/2sub/images/icons/imd_big.svg
+
+TMDB artwork retrieved from the official Logos & Attribution page:
+https://www.themoviedb.org/about/logos-attribution
+https://www.themoviedb.org/assets/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg
+
+Original paths, proportions and artwork colors are retained. Rating values
+come from the user's ordinary 2SUB session; this app does not call the TMDB API.
+
+Retrieved: 2026-10-24. Provenance, source copies and SHA-256 hashes are recorded
+in research/icons/rating-brands/source-manifest.json and NOTICE.md.

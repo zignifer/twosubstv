@@ -1,0 +1,18 @@
+{
+  "version": "0.1.0",
+  "versionCode": 2,
+  "packageId": "app.twosub.tv",
+  "minSdk": 26,
+  "debuggable": false,
+  "apkFile": "2sub-tv.apk",
+  "downloadUrl": "https://github.com/zignifer/twosubstv/releases/download/v0.1.0/2sub-tv.apk",
+  "sha256": "1189fd239ca8331a0f2618d78eddc04ae8fc857ab61f6707d4878b73680df8e0",
+  "sizeBytes": 10452977,
+  "signingCertificateSha256": "dbdde007a61674f4ab7c6a2c0a2b5ebafe6f910bf683fa6eff6ff8f3b284856a",
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ]
+}

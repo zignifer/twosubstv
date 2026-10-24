@@ -1,0 +1,129 @@
+{
+  "source": "https://github.com/lucide-icons/lucide",
+  "selected_by_user": "https://lucide.dev/icons/",
+  "commit": "7faf87628a1ad6175975bc595344337ce14a7db4",
+  "downloaded_date": "2026-10-24",
+  "stroke_width": 2,
+  "viewport": [
+    24,
+    24
+  ],
+  "license": "ISC, with included MIT notice for Feather-derived icons",
+  "license_source": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/LICENSE",
+  "icons": [
+    {
+      "name": "Search",
+      "source_file": "search.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/search.svg",
+      "sha256": "283D371C2E433817BB9C0C8310CAA6C77FA4177C0F4F1168D9C83B97AF7389DC"
+    },
+    {
+      "name": "Refresh",
+      "source_file": "refresh-cw.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/refresh-cw.svg",
+      "sha256": "2E10DD403C85A24F163D59FC6151AA21147FE9402E1305DFC8979208CAEE8944"
+    },
+    {
+      "name": "FilmSlate",
+      "source_file": "clapperboard.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/clapperboard.svg",
+      "sha256": "E4D78946CDA7812F13C431C68B6D4D0077A92217C7F468667A203F237E247D7E"
+    },
+    {
+      "name": "Television",
+      "source_file": "tv.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/tv.svg",
+      "sha256": "0EF7DB17794919D11C241D7F12E23C4CFD3F9E536C0D59FC282657666ED0B39F"
+    },
+    {
+      "name": "Sparkle",
+      "source_file": "sparkles.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/sparkles.svg",
+      "sha256": "F5499F33F09D7158151E9BD2EC0FAF79FF8FB57292F84FDD7286D96D0F0424D8"
+    },
+    {
+      "name": "History",
+      "source_file": "rotate-ccw-clock.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/rotate-ccw-clock.svg",
+      "sha256": "A98FF758157910B9FC9D42D5D5DC80C2F4E037AFA5F8EA4DEE5F5649F03D438D"
+    },
+    {
+      "name": "Play",
+      "source_file": "play.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/play.svg",
+      "sha256": "D7C34786135922A92B6896F6C2384CEEB0346AFBF6041DC79982011411409833"
+    },
+    {
+      "name": "Pause",
+      "source_file": "pause.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/pause.svg",
+      "sha256": "F122EC4EA7F5693A0B1BAAFA9C708B53980DC87B4AACB297C6E6F71C1A4C115C"
+    },
+    {
+      "name": "Subtitles",
+      "source_file": "captions.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/captions.svg",
+      "sha256": "37C4E3ED84224B7D07EE6F5B0F51CC2C5D17E8BF80F86C48059CDCC747607A55"
+    },
+    {
+      "name": "Sliders",
+      "source_file": "sliders-horizontal.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/sliders-horizontal.svg",
+      "sha256": "E43A00E5EB684E6CBB61083BED2528D7A3FA5F265693EB2B5F314CD432AA65F4"
+    },
+    {
+      "name": "Episodes",
+      "source_file": "layers.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/layers.svg",
+      "sha256": "CE16D0A955E3581CDA17F6B2FD5C5BC2034B405F9CECC31C8EBB8495B4AFC1BB"
+    },
+    {
+      "name": "ArrowLeft",
+      "source_file": "arrow-left.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/arrow-left.svg",
+      "sha256": "C5F4B88076108EB1A0D95336E1AA7E7BB1419A3A92AF96F6247D88CD3456F933"
+    },
+    {
+      "name": "CaretDown",
+      "source_file": "chevron-down.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/chevron-down.svg",
+      "sha256": "66EA878E72ED3488BB3B464C39DFDCCEE8D1F78E560DCCEA40E5E12DA0E87E87"
+    },
+    {
+      "name": "SignIn",
+      "source_file": "log-in.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/log-in.svg",
+      "sha256": "80C1D2A429824E86166775E3F81E84BD9E5630ED5DA85D209EB87D91CCD3E936"
+    },
+    {
+      "name": "SignOut",
+      "source_file": "log-out.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/log-out.svg",
+      "sha256": "F24B5B45C05A3ACC346AF8095408F6BA197FF58EA1641A4F2CB25A9702D2C0AC"
+    },
+    {
+      "name": "Filter",
+      "source_file": "list-filter.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/list-filter.svg",
+      "sha256": "36B94082BD7F161244C06A27CDEEA647CB99EE5B805183CBEAF7AC3155A7103B"
+    },
+    {
+      "name": "Sort",
+      "source_file": "arrow-down-wide-narrow.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/arrow-down-wide-narrow.svg",
+      "sha256": "F3900E07A9662640DA27932D925214E72080B751F0F02DE25402479F166FD226"
+    },
+    {
+      "name": "Check",
+      "source_file": "check.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/check.svg",
+      "sha256": "7F33ACC9A77A61659531044525FC008EDEBE215BF4DCF1C789C8674AD3277DB0"
+    },
+    {
+      "name": "Close",
+      "source_file": "x.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/x.svg",
+      "sha256": "4A9CDAB38FBB96162E7DACE28E33F4CA0E49D8963A6162ABC3D4691B7D675117"
+    }
+  ]
+}

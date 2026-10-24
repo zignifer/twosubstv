@@ -1,0 +1,33 @@
+name: Ошибка в приложении
+description: Проблема установки, интерфейса, входа или воспроизведения
+title: "[Ошибка] "
+body:
+  - type: markdown
+    attributes:
+      value: "Спасибо за подробности. Не публикуйте действующий QR, пароли, cookies, платёжные документы или полный профиль WebView. Вопросы подписки решает поддержка 2sub.movie."
+  - type: input
+    id: device
+    attributes:
+      label: Модель ТВ / приставки и версия Android
+      placeholder: Xiaomi MiTV-MOOQ0, Android 11
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия 2SUB TV
+      placeholder: 0.1.0, APK из Releases
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      description: Что нажали, чего ожидали и что произошло. Для видео — название, сезон/серия и качество, без прямых ссылок на поток.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Скриншот и дополнительная информация
+      description: Тип сети, повторяемость ошибки, работает ли тот же материал на сайте. Уберите личные данные.

@@ -1,0 +1,31 @@
+{
+  "retrieved_date": "2026-10-24",
+  "source": "2SUB public rating badge assets",
+  "assets": [
+    {
+      "source": "kp",
+      "file": "kp.svg",
+      "url": "https://2sub.movie/wp-content/themes/2sub/images/icons/kp.svg",
+      "sha256": "B66198F131EC7D36AC18830BE59EDEDAF4799B128C4C211BD80FCEC4FE147603"
+    },
+    {
+      "source": "imdb",
+      "file": "imd_big.svg",
+      "url": "https://2sub.movie/wp-content/themes/2sub/images/icons/imd_big.svg",
+      "sha256": "12F54809360AE6237E872B7BA66CB110F12390DF47D31201731FCF2214B1355B"
+    },
+    {
+      "source": "tmdb",
+      "file": "tmdb.svg",
+      "url": "https://2sub.movie/wp-content/themes/2sub/images/icons/tmdb.svg",
+      "sha256": "321600C2F42FE31CDE242A6F4886040F50EEF22C0A5528F446E765607B25EF4B"
+    }
+  ],
+  "selected_tmdb": {
+    "source": "official TMDB Logos & Attribution page",
+    "file": "tmdb-official-blue-square-1.svg",
+    "url": "https://www.themoviedb.org/assets/v4/logos/v2/blue_square_1-5bdc75aaebeb75dc7ae79426ddd9be3b2be1e342510f8202baf6bffa71d7f5c4.svg",
+    "sha256": "5BDC75AAEBEB75DC7AE79426DDD9BE3B2BE1E342510F8202BAF6BFFA71D7F5C4",
+    "reason": "Complete official two-row TMDB logo with original proportions; site tmdb.svg crops its artwork"
+  }
+}

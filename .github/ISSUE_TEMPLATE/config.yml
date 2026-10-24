@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Аккаунт и подписка 2SUB
+    url: https://2sub.movie/prices/
+    about: Оплата, доступ к аккаунту и поддержка основного сайта
+  - name: Инструкция установки
+    url: https://github.com/zignifer/twosubstv/blob/main/docs/INSTALL.md
+    about: Подключение ТВ, установка APK и обновления
