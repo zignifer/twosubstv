@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -27,8 +27,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - name: Подготовка Android SDK
-        run: sdkmanager 'platforms;android-35' 'build-tools;34.0.0'
+      - name: Проверка Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/34.0.0/aapt"
       - name: Проверки адаптера
         run: npm ci --ignore-scripts && npm test
       - name: Проверки публичных файлов
