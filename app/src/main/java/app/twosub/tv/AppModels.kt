@@ -16,10 +16,12 @@ data class CardItem(
     val landscape: String = "",
     val addedLabel: String = "",
     val episodeLabel: String = "",
+    val updateLabel: String = "",
     val season: Int = 0,
     val episode: Int = 0,
     val positionSeconds: Double = 0.0,
     val durationSeconds: Double = 0.0,
+    val remainingLabel: String = "",
 )
 
 data class RatingItem(val source: String, val label: String, val value: String, val iconUrl: String = "")
@@ -63,6 +65,9 @@ data class PlayerState(
     val buffering: Boolean = false,
     val bufferedSeconds: Double = 0.0,
     val playbackNotice: String = "",
+    val playbackId: String = "",
+    val introAvailable: Boolean = false,
+    val scrubbing: Boolean = false,
 )
 
 data class TvAppState(
@@ -105,6 +110,11 @@ sealed interface TvAction {
     data object LoadMore : TvAction
     data object Toggle : TvAction
     data class Seek(val seconds: Double) : TvAction
+    data class PreviewSeek(val seconds: Double, val playbackId: String, val x: Float, val top: Float) : TvAction
+    data class SeekTo(val seconds: Double, val playbackId: String) : TvAction
+    data class CancelSeek(val playbackId: String) : TvAction
+    data object SkipIntro : TvAction
+    data class ControlsLayout(val clearance: Float) : TvAction
     data class Subtitles(val mode: SubtitleMode) : TvAction
     data class SubtitleScale(val scale: Float) : TvAction
     data class SubtitleBackground(val enabled: Boolean) : TvAction

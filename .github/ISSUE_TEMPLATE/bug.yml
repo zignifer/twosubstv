@@ -16,7 +16,7 @@ body:
     id: version
     attributes:
       label: Версия 2SUB TV
-      placeholder: 0.1.0, APK из Releases
+      placeholder: 0.2.0, APK из Releases
     validations:
       required: true
   - type: textarea

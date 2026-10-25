@@ -35,6 +35,7 @@
   }).slice(-50) : [];
   var qualityVideoKey = '', qualityApplied = false, widthGuardAttempted = false, qualityChange = null;
   var playbackNotice = '', observedVideo = null, observedHandlers = null, waitingSince = 0, lastMediaTime = -1, mediaMetadataRevision = 0;
+  var seekPreview = null, nativeControlClearance = 0;
 
   function read(storage, key, fallback) {
     try { return JSON.parse(storage.getItem(key)) || fallback; } catch (_) { return fallback; }
@@ -113,7 +114,7 @@
         var url = contentUrl(card.getAttribute('href'));
         if (seen[url]) return;
         var title = text(card.querySelector('.card-content__title:not(.card-content__subtitle)'));
-        var image = card.querySelector('.vertical-card__img,.horizontal-card__img');
+        var image = card.querySelector('.vertical-card__img,.horizontal-card__img,.watching-card__img');
         if (!title && image) title = image.getAttribute('alt') || '';
         if (!title) return;
         seen[url] = true;
@@ -122,16 +123,20 @@
         var addedAt = number(attr(card, '.from-now[data-time]', 'data-time'), 0);
         var updateChip = card.querySelector('.update-chip');
         var episodeLabel = updateChip ? String(updateChip.getAttribute('title') || '').trim() || text(updateChip) : text(card.querySelector('.update-chip__text'));
+        var updateLabel = updateChip ? text(updateChip).replace(/^(С\d+)\s+/i, '$1 · ') : episodeLabel;
         var requested = requestedEpisode(url);
         var updateSeason = (episodeLabel.match(/^(\d+)\s+сезон\s*·/) || [])[1];
         var updateEpisode = (episodeLabel.match(/(?:^|[·\s])серия\s+(\d+)$/i) || [])[1];
-        var landscape = card.querySelector('.horizontal-card__img');
+        var landscape = card.querySelector('.horizontal-card__img,.watching-card__img');
+        var progress = card.querySelector('.watching-card__progress');
         var item = { id: card.getAttribute('data-film-list-card-id') || attr(card, '[data-filmid]', 'data-filmid') || url,
           url: url, title: title, originalTitle: text(card.querySelector('.card-content__title.card-content__subtitle')),
-          poster: cleanImage(image ? image.getAttribute('src') || image.getAttribute('data-src') || '' : ''),
+          poster: cleanImage(image && !image.classList.contains('watching-card__img') ? image.getAttribute('src') || image.getAttribute('data-src') || '' : ''),
           landscape: cleanImage(landscape ? landscape.getAttribute('src') || landscape.getAttribute('data-src') || '' : ''),
           year: year, kind: kindFor(url), ratings: parseRatings(card), addedAt: addedAt,
-          addedLabel: relativeAddedLabel(addedAt), episodeLabel: episodeLabel,
+          addedLabel: relativeAddedLabel(addedAt), episodeLabel: episodeLabel, updateLabel: updateLabel,
+          progress: progress ? clamp(number(progress.getAttribute('value'), 0) / Math.max(1, number(progress.getAttribute('max'), 100)), 0, 1) : 0,
+          remainingLabel: text(card.querySelector('.watching-card__remaining')),
           season: requested ? requested.season : number(updateSeason, 0), episode: requested ? requested.number : number(updateEpisode, 0) };
         items.push(item);
         if (image && image.classList.contains('vertical-card__img')) rememberPortrait(item);
@@ -139,11 +144,14 @@
     });
     return items;
   }
-  async function request(url, format, timeoutMs) {
+  async function request(url, format, timeoutMs, authenticated) {
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = setTimeout(function () { if (controller) controller.abort(); }, timeoutMs || 20000);
     try {
-      var response = await fetch(url, { credentials: 'include', signal: controller ? controller.signal : undefined });
+      // Use the current site's session in-place; authentication never crosses the native bridge.
+      var sessionAuth = typeof auth === 'object' && auth ? auth : window.auth;
+      var headers = authenticated && sessionAuth && sessionAuth.nonce ? { 'X-WP-Nonce': sessionAuth.nonce } : {};
+      var response = await fetch(url, { credentials: 'include', headers: headers, cache: authenticated ? 'no-store' : 'default', signal: controller ? controller.signal : undefined });
       if (!response.ok) throw new Error('Сайт ответил HTTP ' + response.status + '.');
       return format === 'json' ? await response.json() : await response.text();
     } finally { clearTimeout(timer); }
@@ -183,14 +191,16 @@
     filter.set('order', order);
     params.set('page', String(page));
     if (query) { params.set('content_type', 'search'); params.set('query', query); }
-    else if (category === 'new') { params.set('content_type', 'list'); params.set('list_name', 'newest'); }
+    else if (category === 'new' || category === 'continue') { params.set('content_type', 'list'); params.set('list_name', category === 'new' ? 'newest' : 'continue_watching'); }
     else {
       params.set('content_type', 'list'); params.set('list_name', 'by_filter');
       params.set('filter_q', filter.toString());
     }
     try {
-      var results = await Promise.all([request('/wp-json/yo/v1/filmlist?' + params.toString(), 'json'), category === 'new' ? Promise.resolve(null) : loadCatalogMetadata()]);
-      var result = results[0], filters = category === 'new' || query ? { genres: [], orders: [] } : filtersFor(results[1], type);
+      var personal = category === 'continue', feed = category === 'new' || personal;
+      if (personal && !emitAuth(false)) throw new Error('Войдите в тот же аккаунт 2SUB, что и в браузере.');
+      var results = await Promise.all([request('/wp-json/yo/v1/filmlist?' + params.toString(), 'json', 15000, personal), feed ? Promise.resolve(null) : loadCatalogMetadata()]);
+      var result = results[0], filters = feed || query ? { genres: [], orders: [] } : filtersFor(results[1], type);
       if (generation !== catalogGeneration) return;
       var context = { page: page, category: category, query: query, genre: genre, order: order, total: typeof result.total === 'number' ? result.total : null, filters: filters };
       if (result.error === 'all_done') { emit('catalog', Object.assign(context, { items: [], hasMore: false })); return; }
@@ -245,9 +255,48 @@
       break;
     }
     if (!mainTitle) throw new Error('Карточка 2SUB изменилась: название не найдено.');
+    var resumeItems = [];
+    for (var j = 0; j < scripts.length; j++) {
+      var configMatch = (scripts[j].textContent || '').match(/window\.yoFilmEpisodesConfig\s*=\s*(\{[\s\S]*?\});/);
+      if (!configMatch) continue;
+      try {
+        var config = JSON.parse(configMatch[1]), snapshot = config.userState && config.userState.progress;
+        var rows = snapshot && Array.isArray(snapshot.items_compact) ? snapshot.items_compact.map(function (row) {
+          return { id: row[0], progress: row[1], percent: row[2], ts: row[3] };
+        }) : snapshot && Array.isArray(snapshot.items) ? snapshot.items : [];
+        rows.forEach(function (row) {
+          var ep = episodes.find(function (ep) { return ep.id === String(row.id); });
+          if (ep) resumeItems.push(resumePoint(ep.url, row));
+        });
+      } catch (_) {}
+      break;
+    }
     return { url: pageUrl(url), id: id || pageUrl(url), title: mainTitle, originalTitle: originalTitle, description: description,
       poster: cleanImage(poster), landscape: cleanImage(attr(doc, '.movie-hero-new__img-bg', 'src')), ratings: parseRatings(doc.querySelector('.movie-hero-new__ratings')),
-      meta: meta, year: releaseYear, kind: kindFor(url), episodes: episodes };
+      meta: meta, year: releaseYear, kind: kindFor(url), episodes: episodes, resumeItems: resumeItems };
+  }
+  function resumePoint(url, item) {
+    var ts = number(item.ts, 0);
+    if (!ts && typeof item.ts === 'string') ts = number(Date.parse(item.ts.replace(' ', 'T') + (/Z$|[+-]\d\d:\d\d$/.test(item.ts) ? '' : 'Z')), 0);
+    var position = Math.max(0, number(item.progress, 0));
+    return { url: url, position: position, updatedAt: ts > 0 && ts < 1e12 ? ts * 1000 : ts,
+      duration: Math.max(0, number(item.duration, 0)) };
+  }
+  async function loadAccountResume(item, requestedUrl) {
+    if (!emitAuth(false)) return item;
+    var newest = item.resumeItems.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
+    var targetUrl = requestedEpisode(requestedUrl) ? requestedUrl : newest ? newest.url : item.episodes.length ? item.episodes[0].url : item.url;
+    var ep = item.episodes.find(function (ep) { return ep.url === targetUrl; });
+    var postId = ep ? ep.id : item.episodes.length ? '' : item.id;
+    if (!/^\d+$/.test(String(postId))) return item;
+    try {
+      var result = await request('/wp-json/yo/light/playback-progress/' + postId, 'json', 8000, true);
+      if (result.item && typeof result.item === 'object' && Number.isFinite(Number(result.item.progress))) {
+        item.resumeItems = item.resumeItems.filter(function (point) { return point.url !== targetUrl; });
+        item.resumeItems.push(resumePoint(targetUrl, result.item));
+      }
+    } catch (_) { /* The embedded snapshot and site's own resume remain available offline. */ }
+    return item;
   }
   async function resolveDetailPortrait(item) {
     if (item.poster) { rememberPortrait(item); return item; }
@@ -270,9 +319,11 @@
     var generation = ++detailGeneration;
     try {
       var url = contentUrl(data.url);
-      var doc = pageUrl(location.href) === pageUrl(url) ? document : new DOMParser().parseFromString(await request(pageUrl(url), 'text'), 'text/html');
+      var doc = new DOMParser().parseFromString(await request(pageUrl(url), 'text', 15000, true), 'text/html');
       if (generation !== detailGeneration) return;
-      var item = await resolveDetailPortrait(parseDetail(doc, url));
+      var parsed = parseDetail(doc, url);
+      var results = await Promise.all([resolveDetailPortrait(parsed), loadAccountResume(parsed, url)]);
+      var item = results[0];
       if (generation === detailGeneration) emit('detail', item);
     } catch (e) { if (generation === detailGeneration) error(e.name === 'AbortError' ? 'Карточка не ответила. Попробуйте ещё раз.' : e.message, 'detail'); }
   }
@@ -322,6 +373,78 @@
       return p.player.yoPerformNetworkSeek(seconds, Object.assign({ reason: reason }, options)) !== false;
     if (p && typeof p.setCurrentTime === 'function') { p.setCurrentTime(seconds); return true; }
     return false;
+  }
+  function playbackId() { return String(currentPlaybackVideo().id || ''); }
+  function matchesPlayback(data) { return playerActive && typeof data.videoId === 'string' && !!data.videoId && data.videoId === playbackId(); }
+  function livePreview(preview) { return preview && playerActive && preview.video === video() && preview.id === playbackId(); }
+  function endSeekPreview(restorePlayback) {
+    var preview = seekPreview;
+    seekPreview = null;
+    if (!preview) return;
+    if (preview.image) { preview.image.onload = null; preview.image.onerror = null; preview.image.src = 'data:,'; }
+    if (preview.popup) preview.popup.remove();
+    // Cancelling never seeks or changes a deliberately paused video.
+    if (restorePlayback && preview.resume && livePreview(preview) && !document.hidden && !pauseLatch) {
+      var p = originalPlayer(), promise = p && typeof p.play === 'function' ? p.play() : preview.video.play();
+      if (promise && promise.catch) promise.catch(function () {});
+    }
+  }
+  function previewClock(seconds) {
+    var total = Math.max(0, Math.floor(seconds)), h = Math.floor(total / 3600), m = Math.floor(total % 3600 / 60), s = String(total % 60).padStart(2, '0');
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + s : m + ':' + s;
+  }
+  function drawSeekPreview(preview) {
+    if (seekPreview !== preview || !preview.popup) return;
+    var width = Math.min(208, number(window.innerWidth, 960) * .22), height = number(window.innerHeight, 540);
+    var viewportWidth = number(window.innerWidth, 960);
+    preview.popup.style.width = width + 'px';
+    preview.popup.style.left = clamp(preview.x * viewportWidth, width / 2 + 12, viewportWidth - width / 2 - 12) + 'px';
+    preview.popup.style.bottom = Math.max(12, (1 - preview.top) * height) + 'px';
+    preview.time.textContent = previewClock(preview.seconds);
+    if (preview.frames > 0) {
+      var frameHeight = width * 180 / preview.image.naturalWidth;
+      var index = Math.min(preview.frames - 1, Math.floor(preview.seconds / preview.video.duration * preview.frames));
+      preview.frame.style.height = frameHeight + 'px';
+      preview.image.style.width = width + 'px';
+      preview.image.style.transform = 'translateY(-' + Math.max(0, index) * frameHeight + 'px)';
+    }
+  }
+  function showSeekPreview(data) {
+    var v = video();
+    if (!matchesPlayback(data) || pending || !v || !Number.isFinite(v.duration) || v.duration <= 0 || typeof data.seconds !== 'number' || !Number.isFinite(data.seconds)) return;
+    if (seekPreview && !livePreview(seekPreview)) endSeekPreview(false);
+    if (!seekPreview) {
+      var p = originalPlayer(), popup = document.createElement('div'), frame = document.createElement('div'), time = document.createElement('div');
+      popup.className = 'twosub-tv-seek-preview'; popup.setAttribute('aria-hidden', 'true');
+      frame.className = 'twosub-tv-seek-preview__frame'; time.className = 'twosub-tv-seek-preview__time';
+      frame.style.display = 'none'; popup.appendChild(frame); popup.appendChild(time);
+      (document.body || document.documentElement).appendChild(popup);
+      var preview = seekPreview = { id: playbackId(), video: v, resume: !v.paused, popup: popup, frame: frame, time: time, frames: 0 };
+      // Stop at the original frame; repeated D-pad input updates only the preview.
+      if (p && typeof p.pause === 'function') p.pause(); else v.pause();
+      var sprite = cleanImage(currentPlaybackVideo().thumbnailSpriteUrl);
+      if (sprite && typeof Image === 'function') {
+        var image = preview.image = new Image(); image.alt = ''; frame.appendChild(image);
+        image.onload = function () {
+          if (seekPreview !== preview || !image.naturalWidth || image.naturalHeight < 180) return;
+          preview.frames = Math.floor(image.naturalHeight / 180); frame.style.display = 'block'; drawSeekPreview(preview);
+        };
+        image.onerror = function () { if (seekPreview === preview) { preview.frames = 0; frame.style.display = 'none'; } };
+        image.src = sprite;
+      }
+    }
+    seekPreview.seconds = clamp(data.seconds, 0, Math.max(0, v.duration - .25));
+    seekPreview.x = clamp(number(data.x, .5), 0, 1);
+    seekPreview.top = clamp(number(data.top, .65), .1, .95);
+    drawSeekPreview(seekPreview);
+  }
+  function availableIntro() {
+    var p = originalPlayer(), v = video(), manager = p && p.skipIntroManager;
+    if (!playerActive || pending || seekPreview || !v || v.readyState < 1 || !manager || !manager.isShown || manager.skipDismissed || typeof manager.getOptions !== 'function' || typeof manager.skipToTarget !== 'function') return null;
+    try {
+      var options = manager.getOptions(), start = Number(options.skipStart), target = Number(options.skipTarget), end = Math.min(start + Number(options.skipDuration), target);
+      return Number.isFinite(target) && target > 0 && v.currentTime >= start - .5 && v.currentTime < end ? manager : null;
+    } catch (_) { return null; }
   }
   function availableQualities(config) {
     var current = config.currentVideo, ids = [];
@@ -477,9 +600,16 @@
       'html.twosub-tv-player.twosub-tv-controls #theSubtitle{top:auto!important;bottom:var(--twosub-control-clearance)!important}' +
       'html.twosub-tv-player.twosub-tv-controls.twosub-tv-panel #theSubtitle{bottom:var(--twosub-panel-clearance)!important}' +
       'html.twosub-tv-player .yo-film-logo-overlay,html.twosub-tv-player .yo-pause-overlay,html.twosub-tv-player .subtitle__actions{display:none!important}' +
+      'html.twosub-tv-player .yo-skip-button{opacity:0!important;pointer-events:none!important}' +
+      'html.twosub-tv-player.twosub-tv-intro:not(.twosub-tv-controls) #theSubtitle{top:auto!important;bottom:var(--twosub-intro-clearance)!important}' +
+      '.twosub-tv-seek-preview{position:fixed;z-index:2147483647;transform:translateX(-50%);pointer-events:none;overflow:hidden;border-radius:8px;background:#10151f;box-shadow:0 6px 20px #0008;font-family:Roboto,"Noto Sans",Arial,sans-serif}' +
+      '.twosub-tv-seek-preview__frame{overflow:hidden;position:relative;width:100%}' +
+      '.twosub-tv-seek-preview__frame img{display:block;max-width:none!important;height:auto!important;margin:0!important;transform-origin:top left}' +
+      '.twosub-tv-seek-preview__time{padding:7px 10px;text-align:center;font-size:16px;line-height:20px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}' +
       'html.twosub-tv-player .subtitle-resize-handle,html.twosub-tv-player .subtitle-settings-gear{display:none!important}' +
       'html.twosub-tv-player #theSubtitle,html.twosub-tv-player #theSubtitle *,html.twosub-tv-player .en-subtitle,html.twosub-tv-player .en-subtitle *,html.twosub-tv-player .ru-subtitle,html.twosub-tv-player .ru-subtitle *{font-family:Roboto,"Noto Sans",Arial,sans-serif!important;font-weight:500!important}' +
       'html.twosub-tv-login .easy-modal.open{padding-top:76px!important;box-sizing:border-box!important}' +
+      'html.twosub-tv-login .easy-modal,html.twosub-tv-login .easy-modal:focus,html.twosub-tv-login .easy-modal :focus{outline:none!important;box-shadow:none!important}' +
       'html.twosub-tv-login .tv-pairing__qr canvas{max-width:240px!important;max-height:240px!important}';
     (document.head || document.documentElement).appendChild(style);
   }
@@ -488,22 +618,29 @@
     var height = Math.round(number(window.innerHeight, 0) || document.documentElement.clientHeight);
     if (height > 0) {
       document.documentElement.style.setProperty('--twosub-viewport-height', height + 'px');
-      document.documentElement.style.setProperty('--twosub-control-clearance', Math.round(clamp(height * 0.25, 100, 180)) + 'px');
-      document.documentElement.style.setProperty('--twosub-panel-clearance', Math.round(height * 0.5) + 'px');
+      document.documentElement.style.setProperty('--twosub-control-clearance', Math.round(nativeControlClearance ? height * nativeControlClearance : clamp(height * 0.25, 100, 180)) + 'px');
+      document.documentElement.style.setProperty('--twosub-panel-clearance', Math.round(height * (nativeControlClearance || .5)) + 'px');
+      document.documentElement.style.setProperty('--twosub-intro-clearance', Math.round(height * .16) + 'px');
     }
   }
   function setPlayerActive(active) {
     playerActive = active;
     updateViewport();
     document.documentElement.classList.toggle('twosub-tv-player', active);
-    if (!active) document.documentElement.classList.remove('twosub-tv-controls', 'twosub-tv-panel');
+    if (!active) { endSeekPreview(false); document.documentElement.classList.remove('twosub-tv-controls', 'twosub-tv-panel', 'twosub-tv-intro'); }
   }
   function stop(clear) {
+    endSeekPreview(false);
+    var flush = playerActive && !pending && !navigating;
     pauseLatch = true; navigating = false;
     pending = null; save(sessionStorage, PENDING, null); resumePending = null; startDeadline = 0; startHardDeadline = 0; startupNotice = '';
     zeroPrepared = false; zeroReadyAt = 0; zeroSeek = null;
     var p = originalPlayer(), v = video();
     try { if (p && typeof p.pause === 'function') p.pause(); else if (v) v.pause(); } catch (_) {}
+    // Preserve the site's own authenticated progress/rewind policy and pending-write handling.
+    if (flush && v && v.readyState >= 1 && Number.isFinite(v.duration) && v.duration > 0 && p && typeof p.storeSecondsOnServer === 'function') {
+      try { p.storeSecondsOnServer({ reason: 'tv-pause' }); } catch (_) {}
+    }
     document.querySelectorAll('video').forEach(function (el) { try { el.pause(); } catch (_) {} });
     if (clear) setPlayerActive(false);
   }
@@ -617,6 +754,9 @@
     watchMedia(v);
     var lang = typeof settings.language === 'string' ? settings.language : 'double';
     var current = currentPlaybackVideo(), correctEpisode = pendingEpisodeReady();
+    if (seekPreview && !livePreview(seekPreview)) endSeekPreview(false);
+    var introAvailable = correctEpisode && !!availableIntro();
+    document.documentElement.classList.toggle('twosub-tv-intro', introAvailable);
     var tracks = current.subs_exist || [];
     var originalAvailable = tracks.length ? tracks.indexOf('double') >= 0 || tracks.indexOf('en') >= 0 || tracks.indexOf(current.orig_lang) >= 0 : !!(p && p.state && p.state.subtitleListData);
     var ruAvailable = tracks.length ? tracks.indexOf('double') >= 0 || tracks.indexOf('ru') >= 0 : originalAvailable;
@@ -627,7 +767,8 @@
       subtitleMode: lang === 'double' ? 'both' : lang === '' ? 'off' : lang === 'ru' ? 'ru' : 'en',
       subtitleScale: number(settings.textSize, 50) / 50, subtitleSize: number(settings.textSize, 50),
       subtitleBackground: number(settings.backgroundTransparencyEn, 0.5) > 0 || number(settings.backgroundTransparencyRu, 0.5) > 0,
-      englishAvailable: originalAvailable, russianAvailable: ruAvailable, speed: v ? v.playbackRate : preferences.speed };
+      englishAvailable: originalAvailable, russianAvailable: ruAvailable, speed: v ? v.playbackRate : preferences.speed,
+      playbackId: playerActive ? playbackId() : '', introAvailable: introAvailable };
     Object.assign(state, videoOptions(config, v));
     var serialized = JSON.stringify(state);
     if (force || serialized !== lastPlayer) { lastPlayer = serialized; emit('player', state); }
@@ -707,6 +848,7 @@
         updateQualityPolicy(); return emitPlayer(true);
       }
       if (name === 'controls') {
+        if (typeof data.clearance === 'number' && data.clearance > 0) nativeControlClearance = clamp(data.clearance, .1, .9);
         updateViewport();
         document.documentElement.classList.toggle('twosub-tv-controls', data.visible === true);
         document.documentElement.classList.toggle('twosub-tv-panel', data.visible === true && data.panelOpen === true);
@@ -715,7 +857,23 @@
       if (name === 'pause') { stop(false); return emitPlayer(true); }
       if (name === 'closePlayer') { stop(true); return emitPlayer(true); }
       var v = video(), p = originalPlayer();
-      if (name === 'quality') {
+      if (name === 'seekPreview') {
+        showSeekPreview(data); return emitPlayer(true);
+      } else if (name === 'seekPreviewCancel') {
+        if (seekPreview && seekPreview.id === data.videoId) endSeekPreview(true);
+        return emitPlayer(true);
+      } else if (name === 'seekTo') {
+        if (!matchesPlayback(data) || !v || !Number.isFinite(v.duration) || v.duration <= 0) return emitPlayer(true);
+        if (typeof data.seconds !== 'number' || !Number.isFinite(data.seconds)) throw new Error('Не удалось выбрать позицию видео.');
+        var resume = livePreview(seekPreview) ? seekPreview.resume : !v.paused;
+        endSeekPreview(false);
+        if (resume) pauseLatch = false;
+        if (!seekPlayback(clamp(data.seconds, 0, Math.max(0, v.duration - .25)), 'tv-timeline', resume)) throw new Error('Перемотка пока недоступна. Попробуйте ещё раз.');
+      } else if (name === 'skipIntro') {
+        var intro = matchesPlayback(data) && availableIntro();
+        if (intro) intro.skipToTarget();
+        return emitPlayer(true);
+      } else if (name === 'quality') {
         if (['auto', 'hd', 'sd'].indexOf(data.value) < 0) throw new Error('Неизвестный режим качества.');
         var ids = availableQualities(playerConfig());
         if (data.value !== 'auto' && !preferredSource(ids, data.value)) throw new Error('Это качество недоступно на выбранном сервере.');
@@ -737,14 +895,21 @@
         }
       } else if (name === 'toggle' || name === 'resume') {
         if (!v) throw new Error('Видео ещё не готово.');
-        if (v.paused) {
+        if (livePreview(seekPreview)) {
+          var selectedTime = seekPreview.seconds;
+          endSeekPreview(false); pauseLatch = false;
+          if (!seekPlayback(selectedTime, 'tv-timeline', true)) throw new Error('Не удалось перейти к выбранному моменту.');
+        } else if (v.paused) {
           pauseLatch = false;
           var promise = p && typeof p.play === 'function' ? p.play() : v.play();
           if (promise && promise.catch) promise.catch(function () { error('Не удалось продолжить видео.', 'toggle'); });
         } else if (name === 'toggle') stop(false);
       } else if (name === 'seek') {
         if (!v || !Number.isFinite(v.duration)) throw new Error('Перемотка пока недоступна.');
-        if (!seekPlayback(clamp(v.currentTime + number(data.delta, 0), 0, Math.max(0, v.duration - 0.25)), 'tv-remote', !v.paused))
+        var seekOrigin = livePreview(seekPreview) ? seekPreview.seconds : v.currentTime;
+        var seekResume = livePreview(seekPreview) ? seekPreview.resume : !v.paused;
+        endSeekPreview(false);
+        if (!seekPlayback(clamp(seekOrigin + number(data.delta, 0), 0, Math.max(0, v.duration - 0.25)), 'tv-remote', seekResume))
           throw new Error('Перемотка пока недоступна. Попробуйте ещё раз.');
       } else if (name === 'subtitle') {
         if (['both', 'en', 'ru', 'off'].indexOf(data.mode) < 0) throw new Error('Неизвестный режим субтитров.');

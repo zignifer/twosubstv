@@ -53,13 +53,17 @@ class MainActivity : ComponentActivity() {
     private var lastHistoryWrite = 0L
     private var lastPlayerLog = 0L
     private var currentItem: CardItem? = null
+    private var requestedDetailUrl = ""
+    private var accountHistory: List<CardItem> = emptyList()
+    private var accountResume: List<ResumePoint> = emptyList()
     private var resolvedDetailUrl: String? = null
     private var playerPanelOpen = false
+    private var controlsClearance = 0f
     private var pauseOnReady = false
     private var playbackErrorCanRecover = false
     private var restartHistoryRequested = false
     private val hideControls = Runnable {
-        if (state.screen == TvScreen.PLAYER && !state.player.paused && !playerPanelOpen) {
+        if (state.screen == TvScreen.PLAYER && !state.player.paused && !playerPanelOpen && !state.player.scrubbing) {
             state = state.copy(player = state.player.copy(controlsVisible = false))
         }
     }
@@ -116,6 +120,8 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(Color.BLACK)
             isFocusable = false
             isFocusableInTouchMode = false
+            defaultFocusHighlightEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -197,6 +203,9 @@ class MainActivity : ComponentActivity() {
 
     private fun command(name: String, payload: JSONObject = JSONObject()) {
         if (rendererGone) return
+        if (state.player.scrubbing && name in setOf("pause", "closePlayer", "resume", "toggle", "seek")) {
+            state = state.copy(player = state.player.copy(scrubbing = false))
+        }
         if (!adapterReady) {
             if (name == "pause" || name == "closePlayer") {
                 pauseOnReady = true
@@ -208,12 +217,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadCatalog(reset: Boolean = true) {
-        if (state.category == CatalogCategory.CONTINUE) {
+        if (state.category == CatalogCategory.CONTINUE && state.authKnown && !state.loggedIn) {
             state = state.copy(catalog = historyItems(), loading = false, hasMore = false, error = null)
             return
         }
         if (reset) catalogPage = 1
-        state = state.copy(loading = true, error = null, status = "Загружаем каталог…")
+        state = state.copy(loading = true, error = null, status = "Загружаем каталог…",
+            catalog = if (state.category == CatalogCategory.CONTINUE && reset) historyItems() else state.catalog)
         armTimeout()
         command("catalog", json("category" to catalogCategoryId(), "query" to state.query,
             "genre" to state.genre, "order" to state.order, "page" to if (reset) 1 else catalogPage + 1))
@@ -224,6 +234,7 @@ class MainActivity : ComponentActivity() {
             CatalogCategory.CARTOONS -> "animation"
             CatalogCategory.ALL -> "all"
             CatalogCategory.NEW -> "new"
+            CatalogCategory.CONTINUE -> "continue"
             else -> "films"
     }
 
@@ -246,8 +257,9 @@ class MainActivity : ComponentActivity() {
             is TvAction.Open -> {
                 if (!isSiteUrl(action.item.url)) return
                 currentItem = action.item
+                requestedDetailUrl = action.item.url
                 resolvedDetailUrl = null
-                val resumeUrl = HistoryPolicy.resumeUrl(action.item.url, history().objects().map { it.optString("url") })
+                val resumeUrl = HistoryPolicy.resumeUrl(action.item.url, resumePoints().map { it.url })
                 state = state.copy(screen = TvScreen.DETAIL, selectedUrl = resumeUrl,
                     detail = withResume(FilmDetail(action.item), resumeUrl), loading = true, error = null)
                 armTimeout()
@@ -293,6 +305,30 @@ class MainActivity : ComponentActivity() {
             TvAction.LoadMore -> if (state.hasMore && !state.loading) loadCatalog(false)
             TvAction.Toggle -> { command("toggle"); scheduleHide() }
             is TvAction.Seek -> { command("seek", json("delta" to action.seconds)); scheduleHide() }
+            is TvAction.PreviewSeek -> if (state.screen == TvScreen.PLAYER && state.player.ready && action.playbackId == state.player.playbackId) {
+                state = state.copy(player = state.player.copy(scrubbing = true))
+                handler.removeCallbacks(hideControls)
+                command("seekPreview", json("seconds" to action.seconds, "videoId" to action.playbackId, "x" to action.x, "top" to action.top))
+            }
+            is TvAction.SeekTo -> if (state.screen == TvScreen.PLAYER && action.playbackId == state.player.playbackId) {
+                state = state.copy(player = state.player.copy(scrubbing = false))
+                command("seekTo", json("seconds" to action.seconds, "videoId" to action.playbackId))
+                scheduleHide()
+            }
+            is TvAction.CancelSeek -> if (state.player.scrubbing && action.playbackId == state.player.playbackId) {
+                state = state.copy(player = state.player.copy(scrubbing = false))
+                command("seekPreviewCancel", json("videoId" to action.playbackId))
+                scheduleHide()
+            }
+            TvAction.SkipIntro -> if (state.screen == TvScreen.PLAYER && state.player.introAvailable) {
+                command("skipIntro", json("videoId" to state.player.playbackId))
+                state = state.copy(player = state.player.copy(introAvailable = false))
+                scheduleHide()
+            }
+            is TvAction.ControlsLayout -> if (state.screen == TvScreen.PLAYER && action.clearance.isFinite() && controlsClearance != action.clearance) {
+                controlsClearance = action.clearance.coerceIn(.1f, .9f)
+                syncPlayerControls()
+            }
             is TvAction.Subtitles -> {
                 state = state.copy(player = state.player.copy(subtitleMode = action.mode))
                 preferences.edit().putString("subtitleMode", action.mode.name).apply()
@@ -317,7 +353,11 @@ class MainActivity : ComponentActivity() {
             is TvAction.Quality -> command("quality", json("value" to action.value))
             is TvAction.Server -> command("server", json("value" to action.value))
             TvAction.ShowControls -> { state = state.copy(player = state.player.copy(controlsVisible = true)); scheduleHide() }
-            TvAction.CloseControls -> { handler.removeCallbacks(hideControls); state = state.copy(player = state.player.copy(controlsVisible = false)) }
+            TvAction.CloseControls -> {
+                if (state.player.scrubbing) onAction(TvAction.CancelSeek(state.player.playbackId))
+                handler.removeCallbacks(hideControls)
+                state = state.copy(player = state.player.copy(controlsVisible = false))
+            }
             TvAction.Interaction -> scheduleHide()
             is TvAction.PanelVisibility -> {
                 playerPanelOpen = action.visible
@@ -327,25 +367,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startPlayer(url: String, position: Double, fromStart: Boolean = false) {
+    private fun startPlayer(url: String, position: Double?, fromStart: Boolean = false) {
         if (!isSiteUrl(url)) return
         restartHistoryRequested = fromStart
         pauseOnReady = false
         appliedPlayerPreferences = false
         playbackErrorCanRecover = false
+        controlsClearance = 0f
         state = state.copy(screen = TvScreen.PLAYER, selectedUrl = url, loading = true, error = null,
-            player = state.player.copy(ready = false, paused = true, currentTime = position, duration = 0.0, controlsVisible = true,
-                title = currentItem?.title ?: state.detail?.item?.title.orEmpty(), error = null))
+            player = state.player.copy(ready = false, paused = true, currentTime = position ?: 0.0, duration = 0.0, controlsVisible = true,
+                title = currentItem?.title ?: state.detail?.item?.title.orEmpty(), error = null,
+                playbackId = "", introAvailable = false, scrubbing = false))
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mediaSession.isActive = true
         armTimeout()
-        command("play", json("url" to url, "position" to position))
+        command("play", json("url" to url).apply { if (position != null) put("position", position) })
     }
 
     private fun handleBack() {
         when (state.screen) {
             TvScreen.PLAYER -> {
                 if (state.error != null || state.player.error != null) { exitPlayer(); return }
+                if (state.player.scrubbing) { onAction(TvAction.CancelSeek(state.player.playbackId)); return }
                 if (state.player.controlsVisible) {
                     state = state.copy(player = state.player.copy(controlsVisible = false))
                 } else {
@@ -375,7 +418,7 @@ class MainActivity : ComponentActivity() {
         handler.removeCallbacks(hideControls)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         mediaSession.isActive = false
-        state = state.copy(screen = TvScreen.DETAIL, loading = false, error = null,
+        state = state.copy(screen = TvScreen.DETAIL, loading = false, error = null, player = state.player.copy(scrubbing = false, introAvailable = false),
             detail = state.detail?.let { withResume(it, state.selectedUrl) })
     }
 
@@ -402,14 +445,17 @@ class MainActivity : ComponentActivity() {
                 syncPlayerControls()
             }
             "catalog" -> {
-                if (state.screen != TvScreen.CATALOG || state.category == CatalogCategory.CONTINUE ||
+                if (state.screen != TvScreen.CATALOG ||
                     event.optString("category") != catalogCategoryId() || event.optString("query") != state.query.trim().take(160) ||
                     event.optString("genre", "") != state.genre || event.optString("order", "site_popularity") != state.order) return
                 val items = event.optJSONArray("items")?.objects()?.map(::parseCard).orEmpty()
                 val page = event.optInt("page", 1)
                 catalogPage = page
                 val filters = event.optJSONObject("filters")
-                state = state.copy(catalog = (if (page <= 1) items else state.catalog + items).distinctBy { it.url },
+                if (state.category == CatalogCategory.CONTINUE) {
+                    accountHistory = (if (page <= 1) items else accountHistory + items).distinctBy { HistoryPolicy.titleKey(it.url) }
+                }
+                state = state.copy(catalog = if (state.category == CatalogCategory.CONTINUE) historyItems() else (if (page <= 1) items else state.catalog + items).distinctBy { it.url },
                     hasMore = event.optBoolean("hasMore"), loading = false, error = null, status = "",
                     genreOptions = filters?.optJSONArray("genres")?.objects()?.map(::parsePlaybackOption).orEmpty().let {
                         if (it.isEmpty()) it else listOf(PlaybackOption("", "Все жанры")) + it.filter { option -> option.id.isNotBlank() }
@@ -432,8 +478,15 @@ class MainActivity : ComponentActivity() {
                 val episodes = event.optJSONArray("episodes")?.objects()?.mapIndexed { index, o ->
                     EpisodeItem(o.optString("id", index.toString()), o.optString("title"), o.optString("url"), o.optInt("season", 1), o.optInt("number", index + 1))
                 }.orEmpty()
+                val resume = event.optJSONArray("resumeItems")?.objects()?.mapNotNull { point ->
+                    val url = point.optString("url")
+                    val position = point.optDouble("position", -1.0)
+                    if (!isSiteUrl(url) || HistoryPolicy.titleKey(url) != HistoryPolicy.titleKey(item.url) || !position.isFinite() || position < 0) null
+                    else ResumePoint(url, position, point.optLong("updatedAt"), point.optDouble("duration", 0.0))
+                }.orEmpty()
+                accountResume = accountResume.filter { HistoryPolicy.titleKey(it.url) != HistoryPolicy.titleKey(item.url) } + resume
                 val playbackUrl = if (state.screen == TvScreen.DETAIL) {
-                    HistoryPolicy.episodePlaybackUrl(state.selectedUrl, episodes)
+                    HistoryPolicy.episodePlaybackUrl(HistoryPolicy.resumeUrl(requestedDetailUrl, resumePoints().map { it.url }), episodes)
                 } else state.selectedUrl
                 currentItem = item
                 resolvedDetailUrl = HistoryPolicy.titleKey(item.url)
@@ -448,6 +501,7 @@ class MainActivity : ComponentActivity() {
                 val loggedIn = event.optBoolean("loggedIn")
                 val wasLogin = state.screen == TvScreen.LOGIN
                 state = state.copy(loggedIn = loggedIn, authKnown = true, accountName = event.optString("displayName"))
+                if (!loggedIn) { accountHistory = emptyList(); accountResume = emptyList() }
                 if (loggedIn && wasLogin) {
                     CookieManager.getInstance().flush()
                     command("closeLogin")
@@ -480,6 +534,7 @@ class MainActivity : ComponentActivity() {
                 }
                 state = state.copy(loading = if (ready && state.screen == TvScreen.PLAYER) false else state.loading,
                     player = old.copy(ready = ready, paused = paused,
+                        scrubbing = old.scrubbing && ready && old.playbackId == event.optString("playbackId"),
                         currentTime = event.optDouble("currentTime", old.currentTime).takeIf { it.isFinite() } ?: 0.0,
                         duration = event.optDouble("duration", old.duration).takeIf { it.isFinite() } ?: 0.0,
                         title = event.optString("title").ifBlank { old.title },
@@ -495,6 +550,8 @@ class MainActivity : ComponentActivity() {
                         buffering = event.optBoolean("buffering"),
                         bufferedSeconds = event.optDouble("bufferedSeconds", 0.0).takeIf { it.isFinite() } ?: 0.0,
                         playbackNotice = event.optString("playbackNotice"),
+                        playbackId = event.optString("playbackId"),
+                        introAvailable = event.optBoolean("introAvailable"),
                         englishAvailable = event.optBoolean("englishAvailable", true),
                         russianAvailable = event.optBoolean("russianAvailable", true)))
                 if (ready && state.screen == TvScreen.PLAYER) {
@@ -522,10 +579,10 @@ class MainActivity : ComponentActivity() {
             }
             "error" -> {
                 val context = event.optString("context")
-                if (context == "catalog" && (state.screen != TvScreen.CATALOG || state.category == CatalogCategory.CONTINUE)) return
+                if (context == "catalog" && state.screen != TvScreen.CATALOG) return
                 if (context == "detail" && state.screen != TvScreen.DETAIL) return
                 if (context == "login" && state.screen != TvScreen.LOGIN) return
-                if (context in setOf("play", "media", "quality", "server", "toggle", "seek", "subtitle", "subtitleSize", "subtitleBackground", "speed") && state.screen != TvScreen.PLAYER) return
+                if (context in setOf("play", "media", "quality", "server", "toggle", "seek", "seekTo", "seekPreview", "seekPreviewCancel", "skipIntro", "subtitle", "subtitleSize", "subtitleBackground", "speed") && state.screen != TvScreen.PLAYER) return
                 playbackErrorCanRecover = state.screen == TvScreen.PLAYER && context in setOf("play", "media")
                 state = state.copy(loading = false, error = event.optString("message", "Не удалось выполнить действие. Повторите попытку."))
                 handler.removeCallbacks(loadingTimeout)
@@ -536,36 +593,52 @@ class MainActivity : ComponentActivity() {
     private fun parseCard(o: JSONObject): CardItem = CardItem(
         id = o.optString("id", o.optString("url")), url = o.optString("url", state.selectedUrl), title = o.optString("title"),
         originalTitle = o.optString("originalTitle"), poster = o.optString("poster"), year = o.optString("year"), kind = o.optString("kind"),
-        landscape = o.optString("landscape"), addedLabel = o.optString("addedLabel"), episodeLabel = o.optString("episodeLabel"),
-        season = o.optInt("season"), episode = o.optInt("episode")
+        landscape = o.optString("landscape"), addedLabel = o.optString("addedLabel"), episodeLabel = o.optString("episodeLabel"), updateLabel = o.optString("updateLabel"),
+        season = o.optInt("season"), episode = o.optInt("episode"),
+        progress = o.optDouble("progress", 0.0).toFloat().coerceIn(0f, 1f), remainingLabel = o.optString("remainingLabel")
     )
     private fun parsePlaybackOption(o: JSONObject) = PlaybackOption(o.optString("id"), o.optString("label"), o.optBoolean("enabled", true))
     private fun syncPlayerControls() = command("controls", json(
         "visible" to (state.screen == TvScreen.PLAYER && state.player.controlsVisible),
-        "panelOpen" to (state.screen == TvScreen.PLAYER && state.player.controlsVisible && playerPanelOpen)
+        "panelOpen" to (state.screen == TvScreen.PLAYER && state.player.controlsVisible && playerPanelOpen),
+        "clearance" to controlsClearance
     ))
     private fun scheduleHide() {
         handler.removeCallbacks(hideControls)
-        if (!playerPanelOpen && state.screen == TvScreen.PLAYER && state.player.controlsVisible) handler.postDelayed(hideControls, 7_000)
+        if (!playerPanelOpen && !state.player.scrubbing && state.screen == TvScreen.PLAYER && state.player.controlsVisible) handler.postDelayed(hideControls, 7_000)
     }
     private fun armTimeout() { handler.removeCallbacks(loadingTimeout); handler.postDelayed(loadingTimeout, 40_000) }
     private fun history(): JSONArray = runCatching { JSONArray(preferences.getString("history", "[]")) }.getOrDefault(JSONArray())
-    private fun resumePosition(url: String): Double = history().objects().firstOrNull { it.optString("url") == url }?.optDouble("position") ?: 0.0
-    private fun historyItems(): List<CardItem> = HistoryPolicy.latestPerTitle(history().objects().map { o ->
-        val episode = HistoryPolicy.episode(o.optString("url"))
-        parseCard(o).copy(
-            progress = if (o.optDouble("duration") > 0) (o.optDouble("position") / o.optDouble("duration")).toFloat().coerceIn(0f, 1f) else 0f,
-            positionSeconds = o.optDouble("position", 0.0), durationSeconds = o.optDouble("duration", 0.0),
-            season = episode?.first ?: 0, episode = episode?.second ?: 0,
-            episodeLabel = episode?.let { "Сезон ${it.first} · Серия ${it.second}" }.orEmpty()
-        )
-    })
+    private fun resumePoints(): List<ResumePoint> = HistoryPolicy.mergeResume(history().objects().map {
+        ResumePoint(it.optString("url"), it.optDouble("position", 0.0), it.optLong("updatedAt"), it.optDouble("duration", 0.0))
+    }, accountResume)
+    private fun resumePosition(url: String): Double? = resumePoints().firstOrNull { it.url == url }?.position
+    private fun historyItems(): List<CardItem> {
+        val local = history().objects().map { o ->
+            val episode = HistoryPolicy.episode(o.optString("url"))
+            parseCard(o).copy(
+                progress = if (o.optDouble("duration") > 0) (o.optDouble("position") / o.optDouble("duration")).toFloat().coerceIn(0f, 1f) else 0f,
+                positionSeconds = o.optDouble("position", 0.0), durationSeconds = o.optDouble("duration", 0.0),
+                season = episode?.first ?: 0, episode = episode?.second ?: 0,
+                episodeLabel = episode?.let { "Сезон ${it.first} · Серия ${it.second}" }.orEmpty()
+            )
+        }
+        val points = resumePoints()
+        val remote = accountHistory.map { item ->
+            val cached = local.firstOrNull { HistoryPolicy.titleKey(it.url) == HistoryPolicy.titleKey(item.url) }
+            val point = points.firstOrNull { it.url == item.url }
+            item.copy(poster = item.poster.ifBlank { cached?.poster.orEmpty() },
+                year = item.year.ifBlank { cached?.year.orEmpty() },
+                positionSeconds = point?.position ?: 0.0, durationSeconds = point?.duration ?: 0.0)
+        }
+        return HistoryPolicy.latestPerTitle(remote + local)
+    }
     private fun withResume(detail: FilmDetail, url: String): FilmDetail {
         val numbers = HistoryPolicy.episode(url)
         val episode = if (numbers == null) detail.episodes.firstOrNull() else detail.episodes.firstOrNull {
             it.season == numbers.first && it.number == numbers.second
         }
-        return detail.copy(resumeSeconds = resumePosition(url), resumeUrl = url,
+        return detail.copy(resumeSeconds = resumePosition(url) ?: 0.0, resumeUrl = url,
             resumeSeason = numbers?.first ?: episode?.season ?: 0,
             resumeEpisode = numbers?.second ?: episode?.number ?: 0, resumeTitle = episode?.title.orEmpty())
     }
@@ -577,9 +650,15 @@ class MainActivity : ComponentActivity() {
             !player.currentTime.isFinite() || (player.currentTime < 2 && !confirmedRestart) ||
             !player.duration.isFinite() || player.duration <= 0) return
         val item = currentItem ?: state.detail?.item ?: return
+        val previous = history().objects().firstOrNull { it.optString("url") == state.selectedUrl }
+        if (!confirmedRestart && previous != null && kotlin.math.abs(previous.optDouble("position") - player.currentTime) < .5 &&
+            kotlin.math.abs(previous.optDouble("duration") - player.duration) < 1) {
+            lastHistoryWrite = System.currentTimeMillis()
+            return
+        }
         val record = json("id" to item.id, "url" to state.selectedUrl, "title" to item.title, "originalTitle" to item.originalTitle,
             "poster" to item.poster, "landscape" to item.landscape, "year" to item.year, "kind" to item.kind,
-            "position" to player.currentTime.coerceAtMost(player.duration), "duration" to player.duration)
+            "position" to player.currentTime.coerceAtMost(player.duration), "duration" to player.duration, "updatedAt" to System.currentTimeMillis())
         val records = JSONArray().put(record)
         history().objects().filter { it.optString("url") != state.selectedUrl }.take(99).forEach { records.put(it) }
         preferences.edit().putString("history", records.toString()).apply()
@@ -592,10 +671,12 @@ class MainActivity : ComponentActivity() {
         foreground = true
         if (::web.isInitialized && !rendererGone) web.onResume()
         if (::mediaSession.isInitialized) mediaSession.isActive = state.screen == TvScreen.PLAYER
+        if (adapterReady && state.screen == TvScreen.CATALOG && state.category == CatalogCategory.CONTINUE) loadCatalog()
         if (state.screen == TvScreen.PLAYER) state = state.copy(player = state.player.copy(controlsVisible = true))
     }
     override fun onPause() {
         foreground = false
+        state = state.copy(player = state.player.copy(scrubbing = false))
         if (::web.isInitialized && !rendererGone) { command("pause"); saveHistory(); CookieManager.getInstance().flush(); web.onPause() }
         if (::mediaSession.isInitialized) mediaSession.isActive = false
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

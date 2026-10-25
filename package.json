@@ -1,9 +1,9 @@
 {
   "name": "twosubstv-adapter-checks",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
-    "test": "node --check app/src/main/assets/2sub-adapter.js && node research/test-adapter-quality.cjs && node research/test-adapter-catalog.cjs"
+    "test": "node --check app/src/main/assets/2sub-adapter.js && node research/test-adapter-quality.cjs && node research/test-adapter-catalog.cjs && node research/test-adapter-history.cjs && node research/test-adapter-player.cjs"
   },
   "devDependencies": {
     "linkedom": "0.18.12"

@@ -38,6 +38,8 @@ const doc = html => new DOMParser().parseFromString(html, 'text/html');
   assert.equal(items[0].title, 'Пример');
   assert.equal(items[0].originalTitle, 'Example');
   assert.equal(items[0].year, '2025–2026');
+  const chip = api.parseCards(doc(card.replace('<span class="update-chip__text">С2 · 3 серия</span>', '<span class="update-chip" title="Сериал 2025–2026 добавлен на сайт"><span class="update-chip__text">Добавлен<span> сериал</span></span></span>')))[0];
+  assert.equal(chip.updateLabel, 'Добавлен сериал', 'Poster badge uses concise visible copy, not a verbose tooltip');
   assert.equal(items[0].addedLabel, '3 часа назад');
   assert.equal(items[0].episodeLabel, 'С2 · 3 серия');
   assert.equal(items[0].season, 2); assert.equal(items[0].episode, 3);

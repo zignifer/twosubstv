@@ -1,7 +1,14 @@
 package app.twosub.tv
 
+internal data class ResumePoint(val url: String, val position: Double, val updatedAt: Long = 0, val duration: Double = 0.0)
+
 /** History stays per episode; Continue presents only the most recently watched entry per title. */
 internal object HistoryPolicy {
+    /** Time of the save wins, including intentional rewinds; distance into a video does not. */
+    fun mergeResume(local: List<ResumePoint>, account: List<ResumePoint>): List<ResumePoint> =
+        (account + local).filter { it.position.isFinite() && it.position >= 0 }
+            .sortedByDescending { it.updatedAt }.distinctBy { it.url }
+
     fun titleKey(url: String): String = url.substringBefore('#').substringBefore('?').trimEnd('/')
 
     fun latestPerTitle(items: List<CardItem>): List<CardItem> = items.distinctBy { titleKey(it.url) }

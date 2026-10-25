@@ -1,8 +1,9 @@
 """Convert the pinned official Lucide SVG subset to Android VectorDrawables.
 
 Run from the project root: python research/icons/convert_lucide.py
-Original paths are copied verbatim; SVG circle/rect primitives are expressed
-as equivalent paths. Stroke width, round caps/joins and 24x24 grid are retained.
+Path geometry is retained, with compact SVG arc flags separated for Android's
+numeric parser; circle/rect primitives become equivalent paths. Stroke width,
+round caps/joins and the 24x24 grid are retained.
 """
 import json
 import re
@@ -19,12 +20,42 @@ def number(value):
     return format(float(value), ".12g")
 
 
+def android_path_data(data):
+    """SVG allows `0 009.8 0` for rotation/flags/dx/dy; Android needs `0 0 0 9.8 0`."""
+    if not re.search(r"[Aa]", data):
+        return data
+    token = re.compile(r"[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?")
+    command, argument, offset, separators = "", 0, 0, []
+    while offset < len(data):
+        char = data[offset]
+        if char.isspace() or char == ",":
+            offset += 1
+            continue
+        if char in "MmLlHhVvCcSsQqTtAaZz":
+            command, argument = char, 0
+            offset += 1
+            continue
+        if command in "Aa" and argument % 7 in (3, 4):
+            assert char in "01", (data, offset)
+            offset += 1
+            if offset < len(data) and (data[offset].isdigit() or data[offset] == "."):
+                separators.append(offset)
+        else:
+            match = token.match(data, offset)
+            assert match, (data, offset)
+            offset = match.end()
+        argument += 1
+    for offset in reversed(separators):
+        data = data[:offset] + " " + data[offset:]
+    return data
+
+
 def geometry(element):
     tag = element.tag.rsplit("}", 1)[-1]
     attrs = element.attrib
     if tag == "path":
         assert set(attrs) == {"d"}
-        return attrs["d"]
+        return android_path_data(attrs["d"])
     if tag == "circle":
         assert set(attrs) == {"cx", "cy", "r"}
         x, y, r = [float(attrs[key]) for key in ("cx", "cy", "r")]

@@ -6,7 +6,7 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../app/src/
 
 function fixture(width = 1998, height = 1080, options = {}) {
   let now = 1000000, interval;
-  const events = [], qualityCalls = [], serverCalls = [], listeners = {}, documentListeners = {}, windowListeners = {}, timers = [], navigation = [], siteStarts = [], episodeResolves = [], episodeSelections = [], seeks = [];
+  const events = [], qualityCalls = [], serverCalls = [], listeners = {}, documentListeners = {}, windowListeners = {}, timers = [], navigation = [], siteStarts = [], episodeResolves = [], episodeSelections = [], seeks = [], progressFlushes = [];
   const storage = (values = {}) => ({getItem: k => values[k] || null, setItem: (k, v) => {values[k] = v;}, removeItem: k => {delete values[k];}});
   const localValues = options.localValues || {};
   const initialPending = {kind: 'play', createdAt: now};
@@ -19,6 +19,7 @@ function fixture(width = 1998, height = 1080, options = {}) {
     currentVideo: {id: 'one', getAvailableQualitiesForUI: () => config.qualityAvailable},
     videoDomains: [{key: 'auto', name: 'Авто'}, {key: 'public', name: 'Обычный'}, {key: 'paid', name: 'Платный', paidOnly: true}]};
   const player = {player: {el: () => ({querySelector: () => media})}, pause: () => media.pause(), play: () => media.play(),
+    storeSecondsOnServer: options => progressFlushes.push(options),
     setActiveSubtitleTrack() {}, setPlaybackSpeed() {},
     seekTo(seconds, reason, opts) {
       seeks.push({seconds, reason, opts});
@@ -63,7 +64,7 @@ function fixture(width = 1998, height = 1080, options = {}) {
   context.window = context; context.top = context;
   vm.runInNewContext(source, context);
   const flush = () => {while (timers.length) timers.shift()();};
-  return {media, config, qualityCalls, serverCalls, events, localValues, sessionValues, navigation, siteStarts, episodeResolves, episodeSelections, seeks, player,
+  return {media, config, qualityCalls, serverCalls, events, localValues, sessionValues, navigation, siteStarts, episodeResolves, episodeSelections, seeks, player, progressFlushes,
     command(name, payload = {}) {context.TwoSubTV.command(name, payload); flush();},
     tick(ms = 1000) {now += ms; interval(); flush();},
     event(name) {if (listeners[name]) listeners[name]();},
@@ -71,6 +72,15 @@ function fixture(width = 1998, height = 1080, options = {}) {
     pagehide() {if (windowListeners.pagehide) windowListeners.pagehide();},
     state() {return events.filter(e => e.type === 'player').at(-1);}};
 }
+
+const saving = fixture(1920, 1080, {sessionValues: {}});
+saving.command('play', {url: 'https://2sub.movie/film/example/'});
+saving.command('pause');
+assert.equal(saving.progressFlushes.length, 1, 'Pause asks the original site player to save authenticated progress');
+assert.equal(saving.progressFlushes[0].reason, 'tv-pause');
+const unfinished = fixture(1920, 1080, {readyState: 0});
+unfinished.command('closePlayer');
+assert.equal(unfinished.progressFlushes.length, 0, 'Unfinished startup cannot overwrite account progress');
 
 const guarded = fixture();
 guarded.command('configure', {problemVideoSizes: [{width: 1998, height: 1080}]});

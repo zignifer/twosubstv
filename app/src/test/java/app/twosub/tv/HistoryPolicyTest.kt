@@ -7,6 +7,27 @@ class HistoryPolicyTest {
     private val series = "https://2sub.movie/series/example/"
     private fun card(url: String) = CardItem(url, url, "Example")
 
+    @Test fun accountPositionReplacesLegacyTvPositionAndHonorsBrowserRewinds() {
+        val url = "${series}#watch-s1e2"
+        val merged = HistoryPolicy.mergeResume(
+            listOf(ResumePoint(url, 900.0)),
+            listOf(ResumePoint(url, 120.0, 1000))
+        )
+        assertEquals(120.0, merged.single().position, 0.0)
+    }
+
+    @Test fun newerTvSaveWinsAndLatestEpisodeIsChosenByTimestamp() {
+        val first = "${series}#watch-s1e2"
+        val second = "${series}#watch-s1e5"
+        val merged = HistoryPolicy.mergeResume(
+            listOf(ResumePoint(first, 15.0, 3000)),
+            listOf(ResumePoint(first, 400.0, 1000), ResumePoint(second, 800.0, 2000))
+        )
+        assertEquals(15.0, merged.first().position, 0.0)
+        assertEquals(first, HistoryPolicy.resumeUrl(series, merged.map { it.url }))
+        assertEquals(second, HistoryPolicy.resumeUrl(second, merged.map { it.url }))
+    }
+
     @Test fun continueShowsLatestWatchedEpisodeEvenWhenItIsAnEarlierEpisode() {
         val items = listOf(card("${series}#watch-s1e2"), card("https://2sub.movie/film/another/"), card("${series}#watch-s1e5"))
         val result = HistoryPolicy.latestPerTitle(items)

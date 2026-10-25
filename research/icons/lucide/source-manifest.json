@@ -124,6 +124,18 @@
       "source_file": "x.svg",
       "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/x.svg",
       "sha256": "4A9CDAB38FBB96162E7DACE28E33F4CA0E49D8963A6162ABC3D4691B7D675117"
+    },
+    {
+      "name": "CatalogGrid",
+      "source_file": "layout-grid.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/layout-grid.svg",
+      "sha256": "B8903F61D09B1D75E55C71158277D26570962F69C2099446A251871E0A2D6678"
+    },
+    {
+      "name": "AnimationSmile",
+      "source_file": "face-grinning.svg",
+      "url": "https://raw.githubusercontent.com/lucide-icons/lucide/7faf87628a1ad6175975bc595344337ce14a7db4/icons/face-grinning.svg",
+      "sha256": "DBB703E0D654A9025EC61A8DB1A25B2BEBC8E0D41D1F2DDB9432E6E731F4A469"
     }
   ]
 }

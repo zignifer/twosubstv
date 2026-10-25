@@ -16,6 +16,8 @@ enum class TvIconName(@DrawableRes val resourceId: Int) {
     Search(R.drawable.ic_search_lucide),
     Refresh(R.drawable.ic_refresh_lucide),
     FilmSlate(R.drawable.ic_film_slate_lucide),
+    CatalogGrid(R.drawable.ic_catalog_grid_lucide),
+    AnimationSmile(R.drawable.ic_animation_smile_lucide),
     Television(R.drawable.ic_television_lucide),
     Sparkle(R.drawable.ic_sparkle_lucide),
     History(R.drawable.ic_history_lucide),

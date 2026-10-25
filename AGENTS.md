@@ -21,13 +21,14 @@ The public repository is https://github.com/zignifer/twosubstv. Read README.md a
 - Never commit cookies, credentials, account identifiers, pairing tokens/codes or signing keys. Keep raw device captures in ignored `private/`. Public login screenshots must contain only a clearly disclosed demo QR with no pairing credentials.
 - Build instructions: docs/BUILD.md. Preserve the package ID and release key for updates. Release keys are private; use environment-based signing. Public APKs must be non-debuggable with WebView debugging disabled.
 - `.local-signing/debug.keystore` belongs to the maintainer's local test installation. Do not replace it or delete that installation. It is not the public release key.
-- Publication was explicitly authorized by the owner on 2026-10-24. Future routine development does not imply publishing: push/release when the user requests it.
+- Publication of 0.1.0 and 0.2.0 was explicitly authorized by the owner on 2026-10-24 and 2026-10-25 respectively. Future routine development does not imply publishing: push/release when the user requests it.
 - Run meaningful checks: Kotlin HistoryPolicy tests, adapter regression tests, release metadata/checksum checks and device verification appropriate to the change. Do not treat a script that merely loads as an executed test.
 - Never overwrite machine/user JAVA_HOME, ANDROID_HOME or GRADLE_USER_HOME. `build.ps1` changes them only for its process and supports the maintainer's local tool bundle.
 
 ## Visual conventions
 
 - Russian UI, Lucide icons, stable button/card size in every focus state.
-- Readable TV type; consistent two-line title slots and aligned metadata in catalog cards.
+- Readable TV type; single-line catalog titles with modestly tighter tracking and ellipsis, aligned metadata. Focus and scrolling own the complete card, including captions. Update/time badges belong on the poster.
 - Posters keep their original aspect ratio. Preserve the site's EN/RU subtitle functionality with matching typography.
 - Prefer evidence from actual screenshots over claims that a successful build proves UX.
+- Timeline focus owns D-pad seeking. Repeated input changes the preview only; OK performs one original network seek, Back cancels, and pause intent is preserved. Preview sprites stay inside the session WebView. Intro skipping uses the site's currently available action with a native focusable button. Horizontal catalog focus changes must not restart vertical row alignment.
